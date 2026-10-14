@@ -56,10 +56,13 @@ def evaluate(model, city, stats, split, device, batch_size=32):
                 average_MAE=float(mae[[0, 2, 5]].mean()), average_RMSE=float(rmse[[0, 2, 5]].mean()))
 
 
-def save_checkpoint(path, model, target, stats, config, stage):
+def save_checkpoint(path, model, target, stats, config, stage, *, parent_checkpoint=None, parent_config=None):
     # Target-local artifact: never contains source data, private RNG, or source optimizer states.
-    torch.save(dict(format='rift_target_v1', target=target, model_state=clone(model.state_dict()),
-                    stats=stats, config=config, stage=stage), path)
+    payload = dict(format='rift_target_v1', target=target, model_state=clone(model.state_dict()),
+                   stats=stats, config=config, stage=stage)
+    if parent_checkpoint is not None:
+        payload.update(parent_checkpoint=parent_checkpoint, parent_config=parent_config)
+    torch.save(payload, path)
 
 
 def train(args):
@@ -201,12 +204,16 @@ def from_checkpoint(args):
     if args.command == 'adapt':
         output = Path(args.output)
         output.mkdir(parents=True, exist_ok=False)
+        effective_config = {**config, **vars(args), 'evaluation_interval': list(city.interval(args.split))}
+        (output/'config.json').write_text(json.dumps(effective_config, indent=2)+'\n', encoding='utf-8')
         torch.manual_seed(config['seed'])
         loader = DataLoader(Windows(city, (0, config['target_days']*city.day_steps), payload['stats']),
                             batch_size=config['batch_size'], shuffle=True,
                             generator=torch.Generator().manual_seed(config['seed']+17031))
         adapt(model, loader, device, args.adapt_epochs)
-        save_checkpoint(output/'target.pt', model, city.city, payload['stats'], config, 'adapted_from_checkpoint')
+        save_checkpoint(output/'target.pt', model, city.city, payload['stats'], effective_config,
+                        'adapted_from_checkpoint', parent_checkpoint=str(Path(args.checkpoint).resolve()),
+                        parent_config=config)
     metrics = evaluate(model, city, payload['stats'], args.split, device, config['batch_size'])
     if args.command == 'adapt':
         (output/'metrics.json').write_text(json.dumps(metrics, indent=2)+'\n', encoding='utf-8')

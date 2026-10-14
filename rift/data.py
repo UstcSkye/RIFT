@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import tempfile
 from pathlib import Path
+from filelock import FileLock
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -133,17 +136,23 @@ def source_statistics(city, cache_dir):
     also include this preprocessing release under the chosen adjacency.
     """
     path = Path(cache_dir) / (city.city + '.json')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Lock before sampling noise so concurrent runs reuse one complete release.
+    with FileLock(str(path) + '.lock'):
+        return _source_statistics_locked(city, path)
+
+
+def _source_statistics_locked(city, path):
     metadata = dict(city=city.city, shape=list(city.array.shape), complete_days=city.days,
                     domain=[0, city.bound], rho=0.1, adjacency='sensor-day replacement')
     if path.exists():
-        cached = json.loads(path.read_text())
+        cached = json.loads(path.read_text(encoding='utf-8'))
         if cached['metadata'] != metadata:
             raise ValueError(f'{path}: statistics belong to a different public data geometry.')
         stats = cached['statistics']
         if not np.isfinite(stats).all() or stats[1] <= 0:
             raise ValueError('Invalid cached source statistics.')
         return stats
-    path.parent.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng()  # Separate secret randomness, never --seed.
     count = city.population * city.day_steps
     def chunks():
@@ -156,7 +165,16 @@ def source_statistics(city, cache_dir):
     sensitivity = max(float(mu)**2, (city.bound-float(mu))**2) / city.population
     std = np.float32(math.sqrt(max(1., second + rng.normal(0, sensitivity/math.sqrt(.1)))))
     stats = [float(mu), float(std)]
-    # Do not overwrite an existing release, including one from another process.
-    with path.open('x', encoding='utf-8') as f:
-        json.dump(dict(metadata=metadata, statistics=stats), f, indent=2)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
+                                         prefix=path.name + '.', suffix='.tmp', delete=False) as f:
+            temporary = Path(f.name)
+            json.dump(dict(metadata=metadata, statistics=stats), f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return stats
