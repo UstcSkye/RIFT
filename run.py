@@ -1,6 +1,7 @@
 """Train, adapt, or evaluate the RIFT Q2-upload / affine-Q4-broadcast release."""
 from __future__ import annotations
 import argparse
+import math
 from rift.data import CITIES
 
 
@@ -21,7 +22,8 @@ def main():
     training.add_argument('--batch-size', type=int, default=32)
     training.add_argument('--source-batch', type=int, default=128)
     training.add_argument('--clip', type=float, default=.25)
-    training.add_argument('--sigma', type=float, default=.8261)
+    training.add_argument('--sigma', type=float, default=.8261,
+                          help='Finite nonnegative source noise multiplier; 0 runs the noise-off control')
     training.add_argument('--target-weight', type=float, default=.9)
     training.add_argument('--temperature', type=float, default=1.)
     training.add_argument('--smoothing', type=float, default=.25)
@@ -42,6 +44,8 @@ def main():
                          help='Evaluation interval (default: held-out test)')
     args = parser.parse_args()
     if args.command == 'train':
+        if not math.isfinite(args.sigma) or args.sigma < 0:
+            parser.error('sigma must be finite and nonnegative; use 0 for the noise-off control.')
         if not 1 <= args.source_rounds <= args.rounds <= 253:
             parser.error('Require 1 <= source-rounds <= rounds <= 253.')
         if min(args.source_steps, args.local_epochs, args.target_days, args.batch_size, args.source_batch) < 1 or args.adapt_epochs < 0:

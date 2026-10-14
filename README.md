@@ -32,7 +32,7 @@ data/traffic/
 
 There are two independent four-city groups. A target uses the other three cities in its group as sources. Chengdu and Shenzhen have 144 observations per day; all other cities have 288. Inputs contain 12 historical steps and forecasts contain 6 steps.
 
-**Evaluation uses the held-out test interval by default.** Speed datasets use `[floor(0.8T), T)`. LargeST uses `[84096, 105120)` of the prepared 2019 sequence. Windows are fully contained in the evaluation interval and advance by one step. MAE and RMSE are computed in original units at horizons 1, 3, and 6; their arithmetic means are also reported. LargeST development-interval results in the manuscript are a different evaluation protocol from these default test results.
+**Evaluation uses the held-out test interval by default.** Speed datasets use `[floor(0.8T), T)`. LargeST uses `[84096, 105120)` of the prepared 2019 sequence. Windows are fully contained in the evaluation interval and advance by one step. MAE and RMSE are computed in original units at horizons 1, 3, and 6; their arithmetic means are also reported.
 
 Target training uses the first three days, with normalization fitted only on this support interval. Speed source records come from complete days in the first 80% of each source sequence. LargeST source records use `[0, 73440)`, comprising 255 complete days. Evaluation observations are never used to fit target normalization.
 
@@ -54,6 +54,8 @@ python run.py train --target pems-bay --seed 1 --device cuda:0 --data-root data/
 Supported targets are `chengdu`, `shenzhen`, `metr-la`, `pems-bay`, `sd`, `oc`, `la`, and `gba`. Run each seed in a new output directory. Existing output directories are not overwritten.
 
 Defaults are 10 source-participating rounds followed by 10 target-only rounds, 4 private source optimizer steps per participating round, 2 target MSE epochs per round, and 50 final target MAE epochs. Target batch size is 32. Source Poisson sampling uses an expected batch of 128 node/day records, each containing 16 within-day windows. The joint clipping bound is 0.25 and the source noise multiplier is 0.8261. Final adaptation uses a fresh Adam optimizer with learning rates 0.002 for the decoder and graph residual and 0.001 for the temporal base.
+
+Use `--sigma 0` for the noise-off control. It retains projection, joint clipping, the optimizer pathway, and private source-normalization releases, but adds no Gaussian noise to source gradients. Its `results.json` marks `source_privacy.mode` as `noise_off`, sets `training_epsilon` to `null`, and reports `no_finite_training_dp_bound`; no finite privacy guarantee is claimed for the noise-off training process. Negative and nonfinite noise multipliers are rejected.
 
 ## Checkpoint reuse
 

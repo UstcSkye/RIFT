@@ -168,9 +168,13 @@ def train(args):
     save_checkpoint(output/'target.pt', target, args.target, target_stats, config, 'adapted')
     metrics = evaluate(target, target_city, target_stats, args.split, device, args.batch_size)
     result = dict(metrics=metrics, communication=ledger.summary(), smoke=args.smoke,
-                  source_privacy=dict(sigma=args.sigma, clip=args.clip, steps=args.source_rounds*args.source_steps,
+                  source_privacy=dict(mode='noise_off' if args.sigma == 0 else 'gaussian',
+                      sigma=args.sigma, clip=args.clip, steps=args.source_rounds*args.source_steps,
                       expected_batch=args.source_batch, statistics_rho_per_source=0.1,
                       sampling_rates={c: args.source_batch/cities[c].population for c in sources}))
+    if args.sigma == 0:
+        result['source_privacy']['training_epsilon'] = None
+        result['source_privacy']['accounting_status'] = 'no_finite_training_dp_bound'
     (output/'results.json').write_text(json.dumps(result, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(dict(output=str(output), metrics=metrics, communication_MB=result['communication']['MB']), indent=2))
 

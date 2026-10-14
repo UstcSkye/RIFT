@@ -11,7 +11,7 @@ class SourceTrainer:
         self.model, self.city, self.stats = model, city, stats
         self.seed, self.city_index = seed, city_index
         self.batch, self.clip, self.sigma = expected_batch, clip, sigma
-        if not 0 < expected_batch <= city.population or clip <= 0 or sigma <= 0:
+        if not 0 < expected_batch <= city.population or clip <= 0 or not np.isfinite(sigma) or sigma < 0:
             raise ValueError('Invalid private batch size, clipping bound, or noise multiplier.')
         self.named = {f'core.{k}': v for k, v in model.core.named_parameters()}
         self.shapes = {k: tuple(v.shape) for k, v in self.named.items()}
