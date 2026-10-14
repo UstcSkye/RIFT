@@ -16,7 +16,7 @@ class TargetConditionedAggregator:
         a = torch.cat([x.cpu().reshape(-1).float() for x in left.values()])
         b = torch.cat([right[k].cpu().reshape(-1).float() for k in left])
         denominator = float(torch.linalg.vector_norm(a) * torch.linalg.vector_norm(b))
-        return float(torch.dot(a, b) / (a.norm()*b.norm())) if denominator > 1e-12 else 0.0
+        return float((a*b).sum() / (a.norm()*b.norm())) if denominator > 1e-12 else 0.0
 
     def __call__(self, reference, target_update, source_updates, innovations):
         scores = np.array([self.cosine(e, target_update) for e in innovations], dtype=np.float64)
